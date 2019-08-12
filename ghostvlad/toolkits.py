@@ -1,5 +1,7 @@
 import os
+
 import numpy as np
+
 
 def initialize_GPU(args):
     # Initialize GPUs
@@ -19,7 +21,6 @@ def get_chunks(l, n):
 
 def debug_generator(generator):
     import cv2
-    import pdb
     G = generator.next()
     for i,img in enumerate(G[0]):
         path = '../sample/{}.jpg'.format(i)

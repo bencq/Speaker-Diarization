@@ -175,11 +175,14 @@ def main():
     # because each sample is of different lengths.
 
     SRC_PATH = r'/data/dataset/SpkWav120'
+    SRC_PATH = r'./SRC_PATH'
+    print(SRC_PATH)
     path_spk_tuples = prepare_data(SRC_PATH)
     train_sequence = []
     train_cluster_id = []
 
-    for epoch in range(7000): # Random choice utterances from whole wavfiles
+    CNT = 10 # 7000
+    for epoch in range(CNT): # Random choice utterances from whole wavfiles
         # A merged utterance contains [10,20] utterances
         splits_count = np.random.randint(10, 20, 1)
         path_spks = random.sample(path_spk_tuples, splits_count[0])
