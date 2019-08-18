@@ -132,7 +132,7 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
 
     return utterances_spec, intervals
 
-def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5):
+def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
 
     # gpu configuration
     toolkits.initialize_GPU(args)
@@ -174,7 +174,7 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5):
 
     # bencq
 
-
+    inference_args.num_speaker = num_speaker
     predicted_label = uisrnnModel.predict(feats, inference_args)
 
     # bencq
@@ -240,5 +240,5 @@ if __name__ == '__main__':
     # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
     # wavPath = r'wavs/LDC2005S15mix_vad.wav'
     # embedding_per_second=1.2, overlap_rate=0.5
-    main(wavPath, embedding_per_second=1.5, overlap_rate=0.2)
+    main(wavPath, embedding_per_second=1.5, overlap_rate=0.2, num_speaker=2)
 

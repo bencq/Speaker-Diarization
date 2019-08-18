@@ -186,6 +186,18 @@ def parse_arguments():
            'Then we return the inference results on the last duplicate as the '
            'final prediction for the test sequence.')
 
+  # bencq
+  inference_parser.add_argument(
+      '--num_speaker',
+      default=0,
+      type=int,
+      help='specify how many speakers in the test sequences'
+           'if 0, as unbounded number of speakers'
+  )
+
+  # bencq
+
+
   # a super parser for sanity checks
   super_parser = argparse.ArgumentParser(
       parents=[model_parser, training_parser, inference_parser])
