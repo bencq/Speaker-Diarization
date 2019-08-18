@@ -35,7 +35,8 @@ global args
 args = parser.parse_args()
 
 
-SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
+SAVED_MODEL_NAME = 'pretrained/mSave.uisrnn'
+# SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn'
 
 def append2dict(speakerSlice, spk_period):
     key = list(spk_period.keys())[0]
@@ -120,7 +121,7 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
         if(cur_slide + spec_len > time):
             break
         spec_mag = mag_T[:, int(cur_slide+0.5) : int(cur_slide+spec_len+0.5)]
-        
+
         # preprocessing, subtract mean, divided by time-wise var
         mu = np.mean(spec_mag, 0, keepdims=True)
         std = np.std(spec_mag, 0, keepdims=True)
@@ -154,6 +155,8 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5):
 
     model_args, _, inference_args = uisrnn.parse_arguments()
     model_args.observation_dim = 512
+
+
     uisrnnModel = uisrnn.UISRNN(model_args)
     uisrnnModel.load(SAVED_MODEL_NAME)
 
@@ -167,7 +170,29 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5):
         feats += [v]
 
     feats = np.array(feats)[:,0,:].astype(float)  # [splits, embedding dim]
+
+
+    # bencq
+
+
     predicted_label = uisrnnModel.predict(feats, inference_args)
+
+    # bencq
+
+
+    # # bencq
+    # # convert all non-0 to 0
+    #
+    # def mFun(x):
+    #     if x == 0:
+    #         return 0
+    #     else:
+    #         return 1
+    #     pass
+    #
+    # predicted_label = [mFun(x) for x in predicted_label]
+    #
+    # # bencq
 
     time_spec_rate = 1000*(1.0/embedding_per_second)*(1.0-overlap_rate) # speaker embedding every ?ms
     center_duration = int(1000*(1.0/embedding_per_second)//2)
@@ -204,5 +229,16 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5):
     p.plot.show()
 
 if __name__ == '__main__':
-    main(r'wavs/rmdmy.wav', embedding_per_second=1.2, overlap_rate=0.4)
+
+    # wavPath = 'F:/tempMaterial/rec.wav'
+    wavPath = r'wavs/eng.wav'
+    # wavPath = r'wavs/mix1_vad.wav'
+    # wavPath = r'wavs/mixA3A4_vad.wav'
+    # wavPath = r'wavs/mixA4A5_vad.wav'
+    wavPath = r'wavs/mixA5L5_vad.wav'
+    # wavPath = r'E:\source_code\python\
+    # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
+    # wavPath = r'wavs/LDC2005S15mix_vad.wav'
+    # embedding_per_second=1.2, overlap_rate=0.5
+    main(wavPath, embedding_per_second=1.5, overlap_rate=0.2)
 

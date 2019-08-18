@@ -15,8 +15,8 @@ import argparse
 parser = argparse.ArgumentParser()
 # set up training configuration.
 parser.add_argument('--gpu', default='', type=str)
-parser.add_argument('--resume', default=r'pretrained/weights.h5', type=str)
-parser.add_argument('--data_path', default='4persons', type=str)
+parser.add_argument('--resume', default=r'./ghostvlad/pretrained/weights.h5', type=str)
+parser.add_argument('--data_path', default=r'./ghostvlad/4persons', type=str)
 # set up network configuration.
 parser.add_argument('--net', default='resnet34s', choices=['resnet34s', 'resnet34l'], type=str)
 parser.add_argument('--ghost_cluster', default=2, type=int)
@@ -51,7 +51,7 @@ def load_wav(vid_path, sr):
     wav, sr_ret = librosa.load(vid_path, sr=sr)
     assert sr_ret == sr
 
-    intervals = librosa.effects.split(wav, top_db=20)
+    intervals = librosa.effects.split(wav, top_db=20) # below top_dp regarded as silent
     wav_output = []
     for sliced in intervals:
       wav_output.extend(wav[sliced[0]:sliced[1]])
@@ -175,16 +175,16 @@ def main():
     # because each sample is of different lengths.
 
     SRC_PATH = r'/data/dataset/SpkWav120'
-    SRC_PATH = r'./SRC_PATH'
+    SRC_PATH = r'./ghostvlad/SRC_PATH' # bencq path
     print(SRC_PATH)
     path_spk_tuples = prepare_data(SRC_PATH)
     train_sequence = []
     train_cluster_id = []
 
-    CNT = 10 # 7000
+    CNT = 7000  # 7000
     for epoch in range(CNT): # Random choice utterances from whole wavfiles
         # A merged utterance contains [10,20] utterances
-        splits_count = np.random.randint(10, 20, 1)
+        splits_count = np.random.randint(10, 20, 1) # 最小值,最大值,[维度]
         path_spks = random.sample(path_spk_tuples, splits_count[0])
         utterance_specs, utterance_speakers = load_data(path_spks, min_win_time=500, max_win_time=1600)
         feats = []
