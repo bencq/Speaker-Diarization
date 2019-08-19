@@ -36,7 +36,7 @@ args = parser.parse_args()
 
 
 SAVED_MODEL_NAME = 'pretrained/mSave.uisrnn'
-# SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn'
+SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
 
 def append2dict(speakerSlice, spk_period):
     key = list(spk_period.keys())[0]
@@ -235,10 +235,10 @@ if __name__ == '__main__':
     # wavPath = r'wavs/mix1_vad.wav'
     # wavPath = r'wavs/mixA3A4_vad.wav'
     # wavPath = r'wavs/mixA4A5_vad.wav'
-    wavPath = r'wavs/mixA5L5_vad.wav'
+    # wavPath = r'wavs/mixA5L5_vad.wav'
     # wavPath = r'E:\source_code\python\
     # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
     # wavPath = r'wavs/LDC2005S15mix_vad.wav'
     # embedding_per_second=1.2, overlap_rate=0.5
-    main(wavPath, embedding_per_second=1.5, overlap_rate=0.2, num_speaker=2)
+    main(wavPath, embedding_per_second=1.2, overlap_rate=0.5, num_speaker=2)
 

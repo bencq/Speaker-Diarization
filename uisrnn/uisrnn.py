@@ -464,7 +464,7 @@ class UISRNN:
             beam_num_clusters + 1 + np.arange(look_ahead))
         for cluster_seq, _ in np.ndenumerate(beam_score_set):
             updated_beam_state = self._update_beam_state(beam_state, look_ahead_seq, cluster_seq)
-            if cluster_seq[0] < args.num_speaker:
+            if cluster_seq[0] < args.num_speaker or args.num_speaker == 0:
                 beam_score_set[cluster_seq] = updated_beam_state.neg_likelihood
         return beam_score_set
 
