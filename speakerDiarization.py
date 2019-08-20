@@ -132,7 +132,7 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
 
     return oriWavData, utterances_spec, intervals
 
-def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
+def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, shallOutput = False, shallShow = True):
 
     # gpu configuration
     toolkits.initialize_GPU(args)
@@ -142,7 +142,7 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
               'n_fft': 512,
               'spec_len': 250,
               'win_length': 400,  # 400
-              'hop_length': 160,  # 160
+              'hop_length': 128,  # 160
               'n_classes': 5994,
               'sampling_rate': 16000,
               'normalize': True,
@@ -206,6 +206,7 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
         print('========= ' + str(spkInd) + ' =========')
 
         # bencq
+
         listIntervalWavData = []
 
         # bencq
@@ -217,20 +218,22 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
             eStr = fmtTime(e)
             print(sStr + ' ==> '+ eStr)
 
-            listIntervalWavData.append(oriWavData[s*params['sr'] // 1000: e*params['sr'] // 1000])
-            listIntervalWavData.append(np.zeros([ _marginTime*params['sr'] ], dtype=np.float))  # margin silence wav
+            if shallOutput:
+                listIntervalWavData.append(oriWavData[s*params['sr'] // 1000: e*params['sr'] // 1000])
+                listIntervalWavData.append(np.zeros([ _marginTime*params['sr'] ], dtype=np.float))  # margin silence wav
 
-        dir, fileName = os.path.split(wav_path)
-        fileNamePrefix, fileNameExtend = os.path.splitext(fileName)
-        outPath = os.path.join(dir, fileNamePrefix + "_" + str(spkInd) + fileNameExtend)
+        if shallOutput:
+            dir, fileName = os.path.split(wav_path)
+            fileNamePrefix, fileNameExtend = os.path.splitext(fileName)
+            outPath = os.path.join(dir, fileNamePrefix + "_" + str(spkInd) + fileNameExtend)
 
-        outWavData = np.concatenate(listIntervalWavData)
-        librosa.output.write_wav(outPath, outWavData, params['sr'])
+            outWavData = np.concatenate(listIntervalWavData)
+            librosa.output.write_wav(outPath, outWavData, params['sr'])
 
-
-    # p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
-    # p.draw()
-    # p.plot.show()
+    if shallShow:
+        p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
+        p.draw()
+        p.plot.show()
 
 if __name__ == '__main__':
 
@@ -246,5 +249,5 @@ if __name__ == '__main__':
     # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
     # wavPath = r'wavs/LDC2005S15mix_vad.wav'
     # embedding_per_second=1.2, overlap_rate=0.5
-    main(wavPath, embedding_per_second=1.2, overlap_rate=0.5, num_speaker=2)
+    main(wavPath, embedding_per_second=1.2, overlap_rate=0.5, num_speaker=2, shallOutput = False, shallShow = True)
 
