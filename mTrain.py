@@ -39,7 +39,7 @@ def diarization_experiment(model_args, training_args, inference_args, isLoaded=T
     train_sequence = train_data['train_sequence']
     train_cluster_id = train_data['train_cluster_id']
 
-    train_sequence_list = [seq.astype(float) + 0.00001 for seq in train_sequence]
+    train_sequence_list = [seq.astype(float) + 1e-5 for seq in train_sequence]
     train_cluster_id_list = [np.array(cid).astype(str) for cid in train_cluster_id]
 
     test_sequences = train_sequence_list[-2:-1]

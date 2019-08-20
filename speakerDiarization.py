@@ -31,6 +31,8 @@ parser.add_argument('--aggregation_mode', default='gvlad', choices=['avg', 'vlad
 parser.add_argument('--loss', default='softmax', choices=['softmax', 'amsoftmax'], type=str)
 parser.add_argument('--test_type', default='normal', choices=['normal', 'hard', 'extend'], type=str)
 
+
+
 global args
 args = parser.parse_args()
 
@@ -38,11 +40,13 @@ args = parser.parse_args()
 SAVED_MODEL_NAME = 'pretrained/mSave.uisrnn'
 SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
 
+_padTime = 150  # extends time(millisecond) for split wavs
+
 def append2dict(speakerSlice, spk_period):
     key = list(spk_period.keys())[0]
     value = list(spk_period.values())[0]
     timeDict = {}
-    timeDict['start'] = int(value[0]+0.5)
+    timeDict['start'] = int(value[0]+0.5)  # rounded
     timeDict['stop'] = int(value[1]+0.5)
     if(key in speakerSlice):
         speakerSlice[key].append(timeDict)
@@ -64,14 +68,20 @@ def arrangeResult(labels, time_spec_rate): # {'1': [{'start':10, 'stop':20}, {'s
     speakerSlice = append2dict(speakerSlice, {lastLabel: (time_spec_rate*j,time_spec_rate*(len(labels)))})
     return speakerSlice
 
-def genMap(intervals):  # interval slices to maptable
-    slicelen = [sliced[1]-sliced[0] for sliced in intervals.tolist()]
-    mapTable = {}  # vad erased time to origin time, only split points
-    idx = 0
-    for i, sliced in enumerate(intervals.tolist()):
-        mapTable[idx] = sliced[0]
-        idx += slicelen[i]
-    mapTable[sum(slicelen)] = intervals[-1,-1]
+
+def genMap(intervals, isWithoutSilence = False):  # interval slices to maptable
+    mapTable = {}
+    if isWithoutSilence:
+
+        pass
+    else:
+        slicelen = [sliced[1]-sliced[0] for sliced in intervals.tolist()]
+        # mapTable vad erased time to origin time, only split points
+        idx = 0
+        for i, sliced in enumerate(intervals.tolist()):
+            mapTable[idx] = sliced[0]
+            idx += slicelen[i]
+        mapTable[sum(slicelen)] = intervals[-1,-1]
 
     keys = [k for k,_ in mapTable.items()]
     keys.sort()
@@ -90,7 +100,7 @@ def load_wav(vid_path, sr):
     wav_output = []
     for sliced in intervals:
       wav_output.extend(wav[sliced[0]:sliced[1]])
-    return wav, np.array(wav_output), (intervals/sr*1000).astype(int)
+    return wav, np.array(wav_output), (intervals*1000/sr).astype(int)
 
 def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
     linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length) # linear spectrogram
@@ -140,8 +150,7 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, sh
     params = {'dim': (257, None, 1), # 'dim': (257, None, 1),
               'sr': 16000, # if None as original sampleRate
               'n_fft': 512,
-              'spec_len': 250,
-              'win_length': 400,  # 400
+              'win_length': 512,  # 400
               'hop_length': 128,  # 160
               'n_classes': 5994,
               'sampling_rate': 16000,
@@ -219,7 +228,7 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, sh
             print(sStr + ' ==> '+ eStr)
 
             if shallOutput:
-                listIntervalWavData.append(oriWavData[s*params['sr'] // 1000: e*params['sr'] // 1000])
+                listIntervalWavData.append(oriWavData[(s-_padTime)*params['sr'] // 1000: (e+_padTime)*params['sr'] // 1000])
                 listIntervalWavData.append(np.zeros([ _marginTime*params['sr'] ], dtype=np.float))  # margin silence wav
 
         if shallOutput:
@@ -231,6 +240,9 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, sh
             librosa.output.write_wav(outPath, outWavData, params['sr'])
 
     if shallShow:
+        # p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
+        # p.draw()
+        # p.plot.show()
         p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
         p.draw()
         p.plot.show()
