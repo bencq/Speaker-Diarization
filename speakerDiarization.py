@@ -90,7 +90,7 @@ def load_wav(vid_path, sr):
     wav_output = []
     for sliced in intervals:
       wav_output.extend(wav[sliced[0]:sliced[1]])
-    return np.array(wav_output), (intervals/sr*1000).astype(int)
+    return wav, np.array(wav_output), (intervals/sr*1000).astype(int)
 
 def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
     linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length) # linear spectrogram
@@ -104,8 +104,8 @@ def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
 #                     |-------------------|
 #                               |-------------------|
 def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embedding_per_second=0.5, overlap_rate=0.5):
-    wav, intervals = load_wav(path, sr=sr)
-    linear_spect = lin_spectogram_from_wav(wav, hop_length, win_length, n_fft)
+    oriWavData, intervalWav, intervals = load_wav(path, sr=sr)
+    linear_spect = lin_spectogram_from_wav(intervalWav, hop_length, win_length, n_fft)
     mag, _ = librosa.magphase(linear_spect)  # magnitude
     mag_T = mag.T
     freq, time = mag_T.shape
@@ -130,18 +130,19 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
 
         cur_slide += spec_hop_len
 
-    return utterances_spec, intervals
+    return oriWavData, utterances_spec, intervals
 
 def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
 
     # gpu configuration
     toolkits.initialize_GPU(args)
 
-    params = {'dim': (257, None, 1),
-              'nfft': 512,
+    params = {'dim': (257, None, 1), # 'dim': (257, None, 1),
+              'sr': 16000, # if None as original sampleRate
+              'n_fft': 512,
               'spec_len': 250,
-              'win_length': 400,
-              'hop_length': 160,
+              'win_length': 400,  # 400
+              'hop_length': 160,  # 160
               'n_classes': 5994,
               'sampling_rate': 16000,
               'normalize': True,
@@ -160,7 +161,7 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
     uisrnnModel = uisrnn.UISRNN(model_args)
     uisrnnModel.load(SAVED_MODEL_NAME)
 
-    specs, intervals = load_data(wav_path, embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
+    oriWavData, specs, intervals = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
     mapTable, keys = genMap(intervals)
 
     feats = []
@@ -179,26 +180,11 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
 
     # bencq
 
-
-    # # bencq
-    # # convert all non-0 to 0
-    #
-    # def mFun(x):
-    #     if x == 0:
-    #         return 0
-    #     else:
-    #         return 1
-    #     pass
-    #
-    # predicted_label = [mFun(x) for x in predicted_label]
-    #
-    # # bencq
-
     time_spec_rate = 1000*(1.0/embedding_per_second)*(1.0-overlap_rate) # speaker embedding every ?ms
     center_duration = int(1000*(1.0/embedding_per_second)//2)
     speakerSlice = arrangeResult(predicted_label, time_spec_rate)
 
-    for spk,timeDicts in speakerSlice.items():    # time map to orgin wav(contains mute)
+    for spkInd,timeDicts in speakerSlice.items():    # time map to orgin wav(contains mute)
         for tid,timeDict in enumerate(timeDicts):
             s = 0
             e = 0
@@ -212,29 +198,49 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0):
                     offset = timeDict['stop'] - keys[i-1]
                     e = mapTable[keys[i-1]] + offset
 
-            speakerSlice[spk][tid]['start'] = s
-            speakerSlice[spk][tid]['stop'] = e
+            speakerSlice[spkInd][tid]['start'] = s
+            speakerSlice[spkInd][tid]['stop'] = e
 
-    for spk,timeDicts in speakerSlice.items():
-        print('========= ' + str(spk) + ' =========')
+    _marginTime = 1  # 1sec
+    for spkInd,timeDicts in speakerSlice.items():
+        print('========= ' + str(spkInd) + ' =========')
+
+        # bencq
+        listIntervalWavData = []
+
+        # bencq
+
         for timeDict in timeDicts:
             s = timeDict['start']
             e = timeDict['stop']
-            s = fmtTime(s)  # change point moves to the center of the slice
-            e = fmtTime(e)
-            print(s+' ==> '+e)
+            sStr = fmtTime(s)  # change point moves to the center of the slice
+            eStr = fmtTime(e)
+            print(sStr + ' ==> '+ eStr)
 
-    p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
-    p.draw()
-    p.plot.show()
+            listIntervalWavData.append(oriWavData[s*params['sr'] // 1000: e*params['sr'] // 1000])
+            listIntervalWavData.append(np.zeros([ _marginTime*params['sr'] ], dtype=np.float))  # margin silence wav
+
+        dir, fileName = os.path.split(wav_path)
+        fileNamePrefix, fileNameExtend = os.path.splitext(fileName)
+        outPath = os.path.join(dir, fileNamePrefix + "_" + str(spkInd) + fileNameExtend)
+
+        outWavData = np.concatenate(listIntervalWavData)
+        librosa.output.write_wav(outPath, outWavData, params['sr'])
+
+
+    # p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
+    # p.draw()
+    # p.plot.show()
 
 if __name__ == '__main__':
 
     # wavPath = 'F:/tempMaterial/rec.wav'
-    wavPath = r'wavs/eng.wav'
+    wavPath = r'wavs/eng_vad.wav'
+    # wavPath = r'wavs/柴宋博-俊业电话录音_vad.wav'
+    # wavPath = r'wavs/陈海峰-俊业电话录音_vad.wav'
     # wavPath = r'wavs/mix1_vad.wav'
-    # wavPath = r'wavs/mixA3A4_vad.wav'
-    # wavPath = r'wavs/mixA4A5_vad.wav'
+    # wavPath = r'wavs/mixA3A4.wav'
+    wavPath = r'wavs/mixA4A5.wav'
     # wavPath = r'wavs/mixA5L5_vad.wav'
     # wavPath = r'E:\source_code\python\
     # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
