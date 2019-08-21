@@ -18,7 +18,7 @@ from viewer import PlotDiar
 import argparse
 parser = argparse.ArgumentParser()
 # set up training configuration.
-parser.add_argument('--gpu', default='', type=str)
+parser.add_argument('--gpu', default='0', type=str)
 parser.add_argument('--resume', default=r'ghostvlad/pretrained/weights.h5', type=str)
 parser.add_argument('--data_path', default='4persons', type=str)
 # set up network configuration.
@@ -43,45 +43,46 @@ SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
 _padTime = 150  # extends time(millisecond) for split wavs
 
 def append2dict(speakerSlice, spk_period):
-    key = list(spk_period.keys())[0]
-    value = list(spk_period.values())[0]
-    timeDict = {}
-    timeDict['start'] = int(value[0]+0.5)  # rounded
-    timeDict['stop'] = int(value[1]+0.5)
-    if(key in speakerSlice):
-        speakerSlice[key].append(timeDict)
-    else:
-        speakerSlice[key] = [timeDict]
+    speakerId = spk_period[0]
+    timePair = spk_period[1] # start time, end time
 
-    return speakerSlice
+    timeDict = {}
+    timeDict['start'] = int(timePair[0]+0.5)  # rounded
+    timeDict['stop'] = int(timePair[1]+0.5)
+
+    if(speakerId in speakerSlice):
+        speakerSlice[speakerId].append(timeDict)
+    else:
+        speakerSlice[speakerId] = [timeDict]
 
 def arrangeResult(labels, time_spec_rate): # {'1': [{'start':10, 'stop':20}, {'start':30, 'stop':40}], '2': [{'start':90, 'stop':100}]}
     lastLabel = labels[0]
     speakerSlice = {}
-    j = 0
-    for i,label in enumerate(labels):
-        if(label==lastLabel):
+    st = 0
+    for i, label in enumerate(labels):
+        if label == lastLabel:
             continue
-        speakerSlice = append2dict(speakerSlice, {lastLabel: (time_spec_rate*j,time_spec_rate*i)})
-        j = i
+        # append2dict(speakerSlice, (lastLabel, (time_spec_rate*st, time_spec_rate*i)))
+        append2dict(speakerSlice, [lastLabel, (time_spec_rate*st, time_spec_rate*i)])
+        st = i
         lastLabel = label
-    speakerSlice = append2dict(speakerSlice, {lastLabel: (time_spec_rate*j,time_spec_rate*(len(labels)))})
+    append2dict(speakerSlice, [lastLabel, (time_spec_rate*st, time_spec_rate*( len(labels) ) ) ] )
     return speakerSlice
 
 
-def genMap(intervals, isWithoutSilence = False):  # interval slices to maptable
+def genMap(intervalsAsMs, isWithoutSilence = False):  # interval slices to maptable
     mapTable = {}
     if isWithoutSilence:
 
         pass
     else:
-        slicelen = [sliced[1]-sliced[0] for sliced in intervals.tolist()]
+        slicelen = [sliced[1] - sliced[0] for sliced in intervalsAsMs.tolist()]
         # mapTable vad erased time to origin time, only split points
         idx = 0
-        for i, sliced in enumerate(intervals.tolist()):
+        for i, sliced in enumerate(intervalsAsMs.tolist()):
             mapTable[idx] = sliced[0]
             idx += slicelen[i]
-        mapTable[sum(slicelen)] = intervals[-1,-1]
+        mapTable[sum(slicelen)] = intervalsAsMs[-1, -1]
 
     keys = [k for k,_ in mapTable.items()]
     keys.sort()
@@ -107,14 +108,17 @@ def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
     return linear.T
 
 
+# spec_len
 # 0s        1s        2s                  4s                  6s
 # |-------------------|-------------------|-------------------|
 # |-------------------|
 #           |-------------------|
 #                     |-------------------|
 #                               |-------------------|
+# |--------|
+# spec_hop_len
 def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embedding_per_second=0.5, overlap_rate=0.5):
-    oriWavData, intervalWav, intervals = load_wav(path, sr=sr)
+    oriWavData, intervalWav, intervalsAsMs = load_wav(path, sr=sr)
     linear_spect = lin_spectogram_from_wav(intervalWav, hop_length, win_length, n_fft)
     mag, _ = librosa.magphase(linear_spect)  # magnitude
     mag_T = mag.T
@@ -140,13 +144,15 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
 
         cur_slide += spec_hop_len
 
-    return oriWavData, utterances_spec, intervals
 
-def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, shallOutput = False, shallShow = True):
+    return oriWavData, utterances_spec, intervalsAsMs
+
+def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False, shallShow = True):
 
     # gpu configuration
     toolkits.initialize_GPU(args)
 
+    # params
     params = {'dim': (257, None, 1), # 'dim': (257, None, 1),
               'sr': 16000, # if None as original sampleRate
               'n_fft': 512,
@@ -156,6 +162,8 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, sh
               'sampling_rate': 16000,
               'normalize': True,
               }
+
+    overlap_rate = (params['win_length'] - params['hop_length']) / params['win_length']
 
     network_eval = spkModel.vggvox_resnet2d_icassp(input_dim=params['dim'],
                                                 num_class=params['n_classes'],
@@ -170,17 +178,21 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, sh
     uisrnnModel = uisrnn.UISRNN(model_args)
     uisrnnModel.load(SAVED_MODEL_NAME)
 
-    oriWavData, specs, intervals = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
-    mapTable, keys = genMap(intervals)
+    oriWavData, specs, intervalsAsMs = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
+    mapTable, keys = genMap(intervalsAsMs)  # keys' unit is ms
 
     feats = []
     for spec in specs:
         spec = np.expand_dims(np.expand_dims(spec, 0), -1)
         v = network_eval.predict(spec)
-        feats += [v]
+        feats.append(v)
 
-    feats = np.array(feats)[:,0,:].astype(float)  # [splits, embedding dim]
+    feats = np.array(feats)[:, 0, :].astype(float)  # [splits, embedding dim]
 
+
+    time_spec_rate = 1000*(1.0/embedding_per_second)*(1.0-overlap_rate)  # speaker embedding every ?ms
+    sample_per_label = time_spec_rate * params['sr'] # ? samples per predicted label in uis-rnn
+    center_duration = int(1000*(1.0/embedding_per_second)//2)
 
     # bencq
 
@@ -189,12 +201,10 @@ def main(wav_path, embedding_per_second=1.0, overlap_rate=0.5, num_speaker=0, sh
 
     # bencq
 
-    time_spec_rate = 1000*(1.0/embedding_per_second)*(1.0-overlap_rate) # speaker embedding every ?ms
-    center_duration = int(1000*(1.0/embedding_per_second)//2)
     speakerSlice = arrangeResult(predicted_label, time_spec_rate)
 
-    for spkInd,timeDicts in speakerSlice.items():    # time map to orgin wav(contains mute)
-        for tid,timeDict in enumerate(timeDicts):
+    for spkInd, timeDicts in speakerSlice.items():    # time map to orgin wav(contains mute)
+        for tid, timeDict in enumerate(timeDicts):
             s = 0
             e = 0
             for i,key in enumerate(keys):
@@ -261,5 +271,5 @@ if __name__ == '__main__':
     # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
     # wavPath = r'wavs/LDC2005S15mix_vad.wav'
     # embedding_per_second=1.2, overlap_rate=0.5
-    main(wavPath, embedding_per_second=1.2, overlap_rate=0.5, num_speaker=2, shallOutput = False, shallShow = True)
+    main(wavPath, embedding_per_second=1.2, num_speaker=2, shallOutput=False, shallShow=True)
 
