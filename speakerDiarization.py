@@ -17,10 +17,9 @@ from viewer import PlotDiar
 # ===========================================
 import argparse
 parser = argparse.ArgumentParser()
-# set up training configuration.
-parser.add_argument('--gpu', default='0', type=str)
+# # set up training configuration.
+parser.add_argument('--gpu', default='', type=str)
 parser.add_argument('--resume', default=r'ghostvlad/pretrained/weights.h5', type=str)
-parser.add_argument('--data_path', default='4persons', type=str)
 # set up network configuration.
 parser.add_argument('--net', default='resnet34s', choices=['resnet34s', 'resnet34l'], type=str)
 parser.add_argument('--ghost_cluster', default=2, type=int)
@@ -31,14 +30,18 @@ parser.add_argument('--aggregation_mode', default='gvlad', choices=['avg', 'vlad
 parser.add_argument('--loss', default='softmax', choices=['softmax', 'amsoftmax'], type=str)
 parser.add_argument('--test_type', default='normal', choices=['normal', 'hard', 'extend'], type=str)
 
-
+# set record wav path
+parser.add_argument('--wavPath', required=True, type=str)
+# set uis-rnn path
+parser.add_argument('--modelPath', default='pretrained/saved_model.uisrnn_benchmark', type=str)
+# decide whether to show the diarization result in gui
+parser.add_argument('--shallShow', default=False, type=bool)
+# decide whether to output the diarization result
+parser.add_argument('--shallOutput', default=True, type=bool)
 
 global args
 args = parser.parse_args()
 
-
-SAVED_MODEL_NAME = 'pretrained/mSave.uisrnn'
-SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
 
 _padTime = 150  # extends time(millisecond) for split wavs
 
@@ -176,7 +179,7 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
 
     uisrnnModel = uisrnn.UISRNN(model_args)
-    uisrnnModel.load(SAVED_MODEL_NAME)
+    uisrnnModel.load(args.modelPath)
 
     oriWavData, specs, intervalsAsMs = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
     mapTable, keys = genMap(intervalsAsMs)  # keys' unit is ms
@@ -260,16 +263,17 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 if __name__ == '__main__':
 
     # wavPath = 'F:/tempMaterial/rec.wav'
-    wavPath = r'wavs/eng_vad.wav'
+    # wavPath = r'wavs/eng_vad.wav'
     # wavPath = r'wavs/柴宋博-俊业电话录音_vad.wav'
     # wavPath = r'wavs/陈海峰-俊业电话录音_vad.wav'
     # wavPath = r'wavs/mix1_vad.wav'
     # wavPath = r'wavs/mixA3A4.wav'
-    wavPath = r'wavs/mixA4A5.wav'
+    # wavPath = r'wavs/mixA4A5.wav'
     # wavPath = r'wavs/mixA5L5_vad.wav'
     # wavPath = r'E:\source_code\python\
     # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
     # wavPath = r'wavs/LDC2005S15mix_vad.wav'
     # embedding_per_second=1.2, overlap_rate=0.5
-    main(wavPath, embedding_per_second=1.2, num_speaker=2, shallOutput=False, shallShow=True)
+
+    main(args.wavPath, embedding_per_second=1.2, num_speaker=2, shallOutput=args.shallOutput, shallShow=args.shallShow)
 

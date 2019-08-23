@@ -16,12 +16,27 @@
 import numpy as np
 
 import uisrnn
+import argparse
+parser = argparse.ArgumentParser()
 
-# SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
-SAVED_MODEL_NAME = 'pretrained/a5a4_100.uisrnn'
 
 
-def diarization_experiment(model_args, training_args, inference_args, isLoaded=True):
+# set whether train new model: True for train new model and vice versa
+parser.add_argument('--shallLoad', default=False, type=bool)
+# set loaded utterances embeddings path
+parser.add_argument('--trainPath', required=True, type=str) # './ghostvlad/training_data.npz'
+# set uis-rnn path
+parser.add_argument('--modelPath', required=True, type=str)  # SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
+# set whether do test and measure accuracy after train
+parser.add_argument('--shallTest', default=False, type=bool)
+# set train iterations
+parser.add_argument('--train_iteration', default=20000, type=int)
+
+args = parser.parse_args()
+
+
+
+def diarization_experiment(model_args, training_args, inference_args, args):
     """Experiment pipeline.
 
     Load data --> train model --> test model --> output result
@@ -32,10 +47,12 @@ def diarization_experiment(model_args, training_args, inference_args, isLoaded=T
       inference_args: inference configurations
     """
 
+
+
     predicted_labels = []
     test_record = []
 
-    train_data = np.load('./ghostvlad/training_data_100.npz', allow_pickle=True)
+    train_data = np.load(args.trainPath, allow_pickle=True)
     train_sequence = train_data['train_sequence']
     train_cluster_id = train_data['train_cluster_id']
 
@@ -47,31 +64,32 @@ def diarization_experiment(model_args, training_args, inference_args, isLoaded=T
 
     model = uisrnn.UISRNN(model_args)
 
-    if not isLoaded:
+    if not args.shallLoad:
         # training
         model.fit(train_sequence_list, train_cluster_id_list, training_args)
-        model.save(SAVED_MODEL_NAME)
+        model.save(args.modelPath)
     else:
         # testing
         # we can also skip training by calling：
-        model.load(SAVED_MODEL_NAME)
+        model.load(args.modelPath)
 
-    for (test_sequence, test_cluster_id) in zip(test_sequences, test_cluster_ids):
-        predicted_label = model.predict(test_sequence, inference_args)
-        predicted_labels.append(predicted_label)
-        accuracy = uisrnn.compute_sequence_match_accuracy(
-            test_cluster_id, predicted_label)
-        test_record.append((accuracy, len(test_cluster_id)))
-        print('Ground truth labels:')
-        print(test_cluster_id)
-        print('Predicted labels:')
-        print(predicted_label)
-        print('-' * 80)
+    if args.shallTest:
+        for (test_sequence, test_cluster_id) in zip(test_sequences, test_cluster_ids):
+            predicted_label = model.predict(test_sequence, inference_args)
+            predicted_labels.append(predicted_label)
+            accuracy = uisrnn.compute_sequence_match_accuracy(
+                test_cluster_id, predicted_label)
+            test_record.append((accuracy, len(test_cluster_id)))
+            print('Ground truth labels:')
+            print(test_cluster_id)
+            print('Predicted labels:')
+            print(predicted_label)
+            print('-' * 80)
 
-    output_string = uisrnn.output_result(model_args, training_args, test_record)
+        output_string = uisrnn.output_result(model_args, training_args, test_record)
 
-    print('Finished diarization experiment')
-    print(output_string)
+        print('Finished diarization experiment')
+        print(output_string)
 
 
 def main():
@@ -83,11 +101,11 @@ def main():
     training_args.enforce_cluster_id_uniqueness = False
     training_args.batch_size = 30
     training_args.learning_rate = 1e-4
-    training_args.train_iteration = 3000
+    training_args.train_iteration = args.train_iteration
     training_args.num_permutations = 20
     # training_args.grad_max_norm = 5.0
     training_args.learning_rate_half_life = 1000
-    diarization_experiment(model_args, training_args, inference_args, isLoaded=False)
+    diarization_experiment(model_args, training_args, inference_args, args)
 
 
 if __name__ == '__main__':

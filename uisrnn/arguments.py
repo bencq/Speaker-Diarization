@@ -203,7 +203,7 @@ def parse_arguments():
       parents=[model_parser, training_parser, inference_parser])
 
   # get arguments
-  super_parser.parse_args()
+  # super_parser.parse_args()
   model_args, _ = model_parser.parse_known_args()
   training_args, _ = training_parser.parse_known_args()
   inference_args, _ = inference_parser.parse_known_args()
