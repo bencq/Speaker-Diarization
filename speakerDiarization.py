@@ -101,7 +101,7 @@ def load_wav(vid_path, sr):
     wav_output = []
     for sliced in intervals:
       wav_output.extend(wav[sliced[0]:sliced[1]])
-    return wav, np.array(wav_output), (intervals*1000/sr).astype(int)
+    return wav, np.array(wav_output), (intervals / sr * 1000).astype(int)
 
 def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
     linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length) # linear spectrogram
