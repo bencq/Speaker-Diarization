@@ -38,6 +38,8 @@ parser.add_argument('--modelPath', default='pretrained/saved_model.uisrnn_benchm
 parser.add_argument('--shallShow', default=False, type=bool)
 # decide whether to output the diarization result
 parser.add_argument('--shallOutput', default=True, type=bool)
+# decide whether load txt file to compute accept rate
+parser.add_argument('--shallComputeAcc', default=False, type=bool)
 
 global args
 args = parser.parse_args()
@@ -150,7 +152,10 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
 
     return oriWavData, utterances_spec, intervalsAsMs
 
-def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False, shallShow = True):
+def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shallShow = True):
+
+    # check
+    assert str.lower(wav_path).endswith('.wav')
 
     # gpu configuration
     toolkits.initialize_GPU(args)
@@ -168,9 +173,7 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
     overlap_rate = (params['win_length'] - params['hop_length']) / params['win_length']
 
-    network_eval = spkModel.vggvox_resnet2d_icassp(input_dim=params['dim'],
-                                                num_class=params['n_classes'],
-                                                mode='eval', args=args)
+    network_eval = spkModel.vggvox_resnet2d_icassp(input_dim=params['dim'], num_class=params['n_classes'], mode='eval', args=args)
     network_eval.load_weights(args.resume, by_name=True)
 
 
@@ -180,6 +183,22 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
     uisrnnModel = uisrnn.UISRNN(model_args)
     uisrnnModel.load(args.modelPath)
+
+
+    interList = None
+    accRate = None
+
+    if args.shallComputeAcc:
+        interList = []
+        accRate = 0.0
+
+        fileTxt = open(wav_path[0: -len('.wav')] + ".txt", mode='r')
+        for line in fileTxt.readlines():
+            if not line or line == '':
+                continue
+            interList.append( [int(frameStr) for frameStr in line.split(' ')] )
+
+
 
     oriWavData, specs, intervalsAsMs = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
     mapTable, keys = genMap(intervalsAsMs)  # keys' unit is ms
@@ -194,8 +213,9 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
 
     time_spec_rate = 1000*(1.0/embedding_per_second)*(1.0-overlap_rate)  # speaker embedding every ?ms
-    sample_per_label = time_spec_rate * params['sr'] # ? samples per predicted label in uis-rnn
-    center_duration = int(1000*(1.0/embedding_per_second)//2)
+
+    # sample_per_label = time_spec_rate * params['sr'] # ? samples per predicted label in uis-rnn
+    # center_duration = int(1000*(1.0/embedding_per_second)//2)
 
     # bencq
 
@@ -208,20 +228,20 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
     for spkInd, timeDicts in speakerSlice.items():    # time map to orgin wav(contains mute)
         for tid, timeDict in enumerate(timeDicts):
-            s = 0
-            e = 0
+            startTime = 0
+            endTime = 0
             for i,key in enumerate(keys):
-                if(s!=0 and e!=0):
+                if(startTime!=0 and endTime!=0):
                     break
-                if(s==0 and key>timeDict['start']):
+                if(startTime==0 and key>timeDict['start']):
                     offset = timeDict['start'] - keys[i-1]
-                    s = mapTable[keys[i-1]] + offset
-                if(e==0 and key>timeDict['stop']):
+                    startTime = mapTable[keys[i-1]] + offset
+                if(endTime==0 and key>timeDict['stop']):
                     offset = timeDict['stop'] - keys[i-1]
-                    e = mapTable[keys[i-1]] + offset
+                    endTime = mapTable[keys[i-1]] + offset
 
-            speakerSlice[spkInd][tid]['start'] = s
-            speakerSlice[spkInd][tid]['stop'] = e
+            speakerSlice[spkInd][tid]['start'] = startTime
+            speakerSlice[spkInd][tid]['stop'] = endTime
 
     _marginTime = 1  # 1sec
     for spkInd,timeDicts in speakerSlice.items():
@@ -229,20 +249,41 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
         # bencq
 
-        listIntervalWavData = []
+        listIntervalWavData = []  # for output wav
+
+        totalFrame = oriWavData.shape[-1]
+        accumulateFrameCnt = 0
 
         # bencq
 
         for timeDict in timeDicts:
-            s = timeDict['start']
-            e = timeDict['stop']
-            sStr = fmtTime(s)  # change point moves to the center of the slice
-            eStr = fmtTime(e)
+
+            startTime = timeDict['start'] - _padTime
+            endTime = timeDict['stop'] + _padTime
+            sStr = fmtTime(startTime)  # change point moves to the center of the slice
+            eStr = fmtTime(endTime)
+
             print(sStr + ' ==> '+ eStr)
 
+            startFrame = max(0, startTime * params['sr'] // 1000)
+            endFrame = min(totalFrame, endTime*params['sr'] // 1000)
+
+            if args.shallComputeAcc:
+                # compute overlap frame count
+                for inter in interList:
+                    ssFrame = max(startFrame, inter[0])
+                    eeFrame = min(endFrame, inter[1])
+
+                    if ssFrame <= eeFrame:
+                        accumulateFrameCnt += (eeFrame - ssFrame)
+
             if shallOutput:
-                listIntervalWavData.append(oriWavData[(s-_padTime)*params['sr'] // 1000: (e+_padTime)*params['sr'] // 1000])
+
+                listIntervalWavData.append(oriWavData[startFrame: endFrame])
                 listIntervalWavData.append(np.zeros([ _marginTime*params['sr'] ], dtype=np.float))  # margin silence wav
+
+        if args.shallComputeAcc:
+            accRate = max(accRate, accumulateFrameCnt / totalFrame)  # bugs to fix
 
         if shallOutput:
             dir, fileName = os.path.split(wav_path)
@@ -251,6 +292,9 @@ def main(wav_path, embedding_per_second=1.0, num_speaker=0, shallOutput = False,
 
             outWavData = np.concatenate(listIntervalWavData)
             librosa.output.write_wav(outPath, outWavData, params['sr'])
+
+    if args.shallComputeAcc:
+        print('acc: %.2f%%' % (100*accRate, ))
 
     if shallShow:
         # p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
