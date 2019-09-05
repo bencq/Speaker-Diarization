@@ -17,14 +17,15 @@ import numpy as np
 
 import uisrnn
 import argparse
+import commonFunc
 parser = argparse.ArgumentParser()
 
 
 
 # set whether train new model: False for train new model and vice versa
-parser.add_argument('--shallLoad', default=False, type=bool)
+parser.add_argument('--shallLoad', default=False, type=commonFunc.str2bool)
 # set whether do test and measure accuracy after train
-parser.add_argument('--shallTest', default=False, type=bool)
+parser.add_argument('--shallTest', default=False, type=commonFunc.str2bool)
 # set loaded utterances embeddings path
 parser.add_argument('--trainPath', required=True, type=str) # './ghostvlad/training_data.npz'
 # set uis-rnn path
