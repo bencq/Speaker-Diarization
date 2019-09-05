@@ -10,6 +10,9 @@ sys.path.append('visualization')
 import toolkits
 import model as spkModel
 import os
+import commonFunc
+import soundfile
+
 from viewer import PlotDiar
 
 # ===========================================
@@ -35,11 +38,11 @@ parser.add_argument('--wavPath', required=True, type=str)
 # set uis-rnn path
 parser.add_argument('--modelPath', default='pretrained/saved_model.uisrnn_benchmark', type=str)
 # decide whether to show the diarization result in gui
-parser.add_argument('--shallShow', default=False, type=bool)
+parser.add_argument('--shallShow', default=False, type=commonFunc.str2bool)
 # decide whether to output the diarization result
-parser.add_argument('--shallOutput', default=True, type=bool)
+parser.add_argument('--shallOutput', default=True, type=commonFunc.str2bool)
 # decide whether load txt file to compute accept rate
-parser.add_argument('--shallComputeAcc', default=False, type=bool)
+parser.add_argument('--shallComputeAcc', default=False, type=commonFunc.str2bool)
 
 global args
 args = parser.parse_args()
@@ -106,7 +109,7 @@ def load_wav(vid_path, sr):
     wav_output = []
     for sliced in intervals:
       wav_output.extend(wav[sliced[0]:sliced[1]])
-    return wav, np.array(wav_output), (intervals / sr * 1000).astype(int)
+    return wav, np.array(wav_output), intervals
 
 def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
     linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length) # linear spectrogram
@@ -123,7 +126,7 @@ def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
 # |--------|
 # spec_hop_len
 def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embedding_per_second=0.5, overlap_rate=0.5):
-    oriWavData, intervalWav, intervalsAsMs = load_wav(path, sr=sr)
+    oriWavData, intervalWav, intervals = load_wav(path, sr=sr)
     linear_spect = lin_spectogram_from_wav(intervalWav, hop_length, win_length, n_fft)
     mag, _ = librosa.magphase(linear_spect)  # magnitude
     mag_T = mag.T
@@ -150,7 +153,7 @@ def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embeddi
         cur_slide += spec_hop_len
 
 
-    return oriWavData, utterances_spec, intervalsAsMs
+    return oriWavData, utterances_spec, intervals
 
 def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shallShow = True):
 
@@ -196,11 +199,12 @@ def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shall
         for line in fileTxt.readlines():
             if not line or line == '':
                 continue
-            interList.append( [int(frameStr) for frameStr in line.split(' ')] )
+            interList.append( [int(intStr) for intStr in line.split(' ')] )
 
 
 
-    oriWavData, specs, intervalsAsMs = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
+    oriWavData, specs, intervals = load_data(wav_path, win_length=params['win_length'], sr=params['sr'], hop_length=params['hop_length'], n_fft=params['n_fft'], embedding_per_second=embedding_per_second, overlap_rate=overlap_rate)
+    intervalsAsMs = (intervals / params['sr'] * 1000).astype(int)
     mapTable, keys = genMap(intervalsAsMs)  # keys' unit is ms
 
     feats = []
@@ -244,15 +248,14 @@ def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shall
             speakerSlice[spkInd][tid]['stop'] = endTime
 
     _marginTime = 1  # 1sec
-    for spkInd,timeDicts in speakerSlice.items():
+    accumulateFrameCnt = [0] * 2  # classify to 0 or 1 -> 00 + 11 or 01 + 10
+    _totalFrame = intervals[-1][-1] - intervals[0][0]
+    for spkInd, timeDicts in speakerSlice.items():
         print('========= ' + str(spkInd) + ' =========')
 
         # bencq
 
         listIntervalWavData = []  # for output wav
-
-        totalFrame = oriWavData.shape[-1]
-        accumulateFrameCnt = 0
 
         # bencq
 
@@ -266,24 +269,23 @@ def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shall
             print(sStr + ' ==> '+ eStr)
 
             startFrame = max(0, startTime * params['sr'] // 1000)
-            endFrame = min(totalFrame, endTime*params['sr'] // 1000)
+            endFrame = min(_totalFrame, endTime*params['sr'] // 1000)
 
             if args.shallComputeAcc:
                 # compute overlap frame count
                 for inter in interList:
+
                     ssFrame = max(startFrame, inter[0])
                     eeFrame = min(endFrame, inter[1])
 
+                    ind = inter[2] ^ spkInd
                     if ssFrame <= eeFrame:
-                        accumulateFrameCnt += (eeFrame - ssFrame)
+                        accumulateFrameCnt[ind] += (eeFrame - ssFrame)
 
             if shallOutput:
 
                 listIntervalWavData.append(oriWavData[startFrame: endFrame])
                 listIntervalWavData.append(np.zeros([ _marginTime*params['sr'] ], dtype=np.float))  # margin silence wav
-
-        if args.shallComputeAcc:
-            accRate = max(accRate, accumulateFrameCnt / totalFrame)  # bugs to fix
 
         if shallOutput:
             dir, fileName = os.path.split(wav_path)
@@ -291,15 +293,18 @@ def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shall
             outPath = os.path.join(dir, fileNamePrefix + "_" + str(spkInd) + fileNameExtend)
 
             outWavData = np.concatenate(listIntervalWavData)
-            librosa.output.write_wav(outPath, outWavData, params['sr'])
+
+            soundfile.write(outPath, data=outWavData, samplerate=params['sr'], format='WAV')
+            # librosa.output.write_wav(outPath, outWavData, params['sr'])
+
+    if args.shallComputeAcc:
+        accRate = min(1, max(accumulateFrameCnt[0], accumulateFrameCnt[1]) / _totalFrame)  # bugs to fix
 
     if args.shallComputeAcc:
         print('acc: %.2f%%' % (100*accRate, ))
 
     if shallShow:
-        # p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
-        # p.draw()
-        # p.plot.show()
+
         p = PlotDiar(map=speakerSlice, wav=wav_path, gui=True, size=(25, 6))
         p.draw()
         p.plot.show()
