@@ -1,17 +1,18 @@
 from __future__ import absolute_import
 from __future__ import print_function
-import os
-import sys
-import numpy as np
-import librosa
-
-import toolkits
-import random
 
 # ===========================================
 #        Parse the argument
 # ===========================================
 import argparse
+import os
+import random
+
+import librosa
+import numpy as np
+
+import toolkits
+
 parser = argparse.ArgumentParser()
 # set up training configuration.
 parser.add_argument('--gpu', default='', type=str)
@@ -26,35 +27,34 @@ parser.add_argument('--aggregation_mode', default='gvlad', choices=['avg', 'vlad
 parser.add_argument('--loss', default='softmax', choices=['softmax', 'amsoftmax'], type=str)
 parser.add_argument('--test_type', default='normal', choices=['normal', 'hard', 'extend'], type=str)
 
-
 # set data directory
 parser.add_argument('--data_path', default=r'./SRC_PATH', type=str)
 # set the number of utterances to generate
 parser.add_argument('--cnt', default=7000, type=int)
 # set save npz path and name
-parser.add_argument('--savePath', required=True, type=str) # default='training_data.npz'
+parser.add_argument('--savePath', required=True, type=str)  # default='training_data.npz'
 # set min number of utterances
 parser.add_argument('--minUtter', default=10, type=int)
 # set max number of utterances
 parser.add_argument('--maxUtter', default=20, type=int)
 
-
-
 args = parser.parse_args()
+
 
 def similar(matrix):  # calc speaker-embeddings similarity in pretty format output.
     ids = matrix.shape[0]
     for i in range(ids):
         for j in range(ids):
-            dist = matrix[i,:]*matrix[j,:]
-            dist = np.linalg.norm(matrix[i,:] - matrix[j,:])
+            dist = matrix[i, :] * matrix[j, :]
+            dist = np.linalg.norm(matrix[i, :] - matrix[j, :])
             print('%.2f  ' % dist, end='')
-            if((j+1)%3==0 and j!=0):
+            if ((j + 1) % 3 == 0 and j != 0):
                 print("| ", end='')
-        if((i+1)%3==0 and i!=0):
+        if ((i + 1) % 3 == 0 and i != 0):
             print('\n')
-            print("*"*80, end='')
+            print("*" * 80, end='')
         print("\n")
+
 
 # ===============================================
 #       code from Arsha for loading data.
@@ -63,21 +63,23 @@ def load_wav(vid_path, sr):
     wav, sr_ret = librosa.load(vid_path, sr=sr)
     assert sr_ret == sr
 
-    intervals = librosa.effects.split(wav, top_db=20) # below top_dp regarded as silent
+    intervals = librosa.effects.split(wav, top_db=20)  # below top_dp regarded as silent
     wav_output = []
     for sliced in intervals:
-      wav_output.extend(wav[sliced[0]:sliced[1]])
+        wav_output.extend(wav[sliced[0]:sliced[1]])
     wav_output = np.array(wav_output)
     return wav_output
 
+
 def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
-    linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length) # linear spectrogram
+    linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length)  # linear spectrogram
     return linear.T
 
+
 def load_data(path_spk_tuples, win_length, sr, hop_length, n_fft, min_win_time=240, max_win_time=1600):
-    win_time = np.random.randint(min_win_time, max_win_time, 1)[0] # win_length in [240,1600] ms
-    win_spec = win_time//(1000//(sr//hop_length)) # win_length in spectrum
-    hop_spec = win_spec//2
+    win_time = np.random.randint(min_win_time, max_win_time, 1)[0]  # win_length in [240,1600] ms
+    win_spec = win_time // (1000 // (sr // hop_length))  # win_length in spectrum
+    hop_spec = win_spec // 2
 
     wavs = np.array([])
     change_points = []
@@ -85,9 +87,9 @@ def load_data(path_spk_tuples, win_length, sr, hop_length, n_fft, min_win_time=2
     speakers = list(zip(*path_spk_tuples))[1]
 
     for path in paths:
-        wav = load_wav(path, sr=sr) # VAD
+        wav = load_wav(path, sr=sr)  # VAD
         wavs = np.concatenate((wavs, wav))
-        change_points.append(wavs.shape[0]//hop_length) # change_point in spectrum
+        change_points.append(wavs.shape[0] // hop_length)  # change_point in spectrum
 
     linear_spect = lin_spectogram_from_wav(wavs, hop_length, win_length, n_fft)
     mag, _ = librosa.magphase(linear_spect)  # magnitude
@@ -101,12 +103,12 @@ def load_data(path_spk_tuples, win_length, sr, hop_length, n_fft, min_win_time=2
     cur_spec = 0
     cur_speaker = speakers[0]
     i = 0
-    while(True):
-        if(cur_spec+win_spec>time):
+    while (True):
+        if (cur_spec + win_spec > time):
             break
-        spec_mag = mag_T[:, cur_spec:cur_spec+win_spec]
+        spec_mag = mag_T[:, cur_spec:cur_spec + win_spec]
 
-        if(cur_spec+win_spec//2>change_points[i]): # cur win_spec span to the next speaker
+        if (cur_spec + win_spec // 2 > change_points[i]):  # cur win_spec span to the next speaker
             i += 1
             cur_speaker = speakers[i]
 
@@ -127,21 +129,21 @@ def prepare_data(SRC_PATH):
 
     allpath_list = []
     allspk_list = []
-    for i,spkDir in enumerate(wavDir):   # Each speaker's directory
-        spk = spkDir    # speaker name
+    for i, spkDir in enumerate(wavDir):  # Each speaker's directory
+        spk = spkDir  # speaker name
         wavPath = os.path.join(SRC_PATH, spkDir, 'audio')
-        for wav in os.listdir(wavPath): # wavfile
+        for wav in os.listdir(wavPath):  # wavfile
             utter_path = os.path.join(wavPath, wav)
             allpath_list.append(utter_path)
             allspk_list.append(i)
-        if(i>100):
+        if (i > 100):
             break
 
     path_spk_list = list(zip(allpath_list, allspk_list))
     return path_spk_list
 
-def main():
 
+def main():
     # gpu configuration
     toolkits.initialize_GPU(args)
 
@@ -149,7 +151,7 @@ def main():
     # ==================================
     #       Get Train/Val.
     # ==================================
-    
+
     total_list = [os.path.join(args.data_path, file) for file in os.listdir(args.data_path)]
     unique_list = np.unique(total_list)
 
@@ -186,29 +188,29 @@ def main():
     # The feature extraction process has to be done sample-by-sample,
     # because each sample is of different lengths.
 
-
     SRC_PATH = args.data_path  # r'./ghostvlad/SRC_PATH' # bencq path
     print(SRC_PATH)
-
 
     path_spk_tuples = prepare_data(SRC_PATH)
     train_sequence = []
     train_cluster_id = []
 
     CNT = args.cnt  # 7000
-    for epoch in range(CNT): # Random choice utterances from whole wavfiles
+    for epoch in range(CNT):  # Random choice utterances from whole wavfiles
         # A merged utterance contains [10,20] utterances
-        splits_count = np.random.randint(args.minUtter, args.maxUtter, 1) # 最小值,最大值,[维度]
+        splits_count = np.random.randint(args.minUtter, args.maxUtter, 1)  # 最小值,最大值,[维度]
         path_spks = random.sample(path_spk_tuples, splits_count[0])
         # utterance_specs, utterance_speakers = load_data(path_spks, min_win_time=500, max_win_time=1600)
-        utterance_specs, utterance_speakers =load_data(path_spks, win_length=params['win_length'], sr=params['sampling_rate'], hop_length=params['hop_length'], n_fft=params['n_fft'])
+        utterance_specs, utterance_speakers = load_data(path_spks, win_length=params['win_length'],
+                                                        sr=params['sampling_rate'], hop_length=params['hop_length'],
+                                                        n_fft=params['n_fft'])
         feats = []
         for spec in utterance_specs:
             spec = np.expand_dims(np.expand_dims(spec, 0), -1)
             v = network_eval.predict(spec)
             feats += [v]
 
-        feats = np.array(feats)[:,0,:]  # [splits, embedding dim]
+        feats = np.array(feats)[:, 0, :]  # [splits, embedding dim]
         train_sequence.append(feats)
         train_cluster_id.append(utterance_speakers)
         print("epoch:{}, utterance length: {}, speakers: {}".format(epoch, len(utterance_speakers), len(path_spks)))

@@ -15,10 +15,10 @@
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import autograd
 from torch import nn
 from torch import optim
-import torch.nn.functional as F
 
 from uisrnn import loss_func
 from uisrnn import utils
@@ -409,7 +409,7 @@ class UISRNN:
                 mean, hidden = self.rnn_model(
                     look_ahead_seq[sub_idx, :].unsqueeze(0).unsqueeze(0),
                     new_beam_state.hidden_set[cluster])
-                new_beam_state.mean_set[cluster] = (new_beam_state.mean_set[cluster]*(
+                new_beam_state.mean_set[cluster] = (new_beam_state.mean_set[cluster] * (
                         (np.array(new_beam_state.trace) == cluster).sum() -
                         1).astype(float) + mean.clone()) / (
                                                            np.array(new_beam_state.trace) == cluster).sum().astype(
@@ -529,7 +529,6 @@ class UISRNN:
                     args.beam_size, max_clusters + 1 + np.arange(
                         look_ahead_seq_length)))
             for beam_rank, beam_state in enumerate(beam_set):
-
                 beam_score_set = self._calculate_score(beam_state, look_ahead_seq, args)
                 tmp = np.pad(
                     beam_score_set,

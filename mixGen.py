@@ -1,10 +1,11 @@
-import os
-import sys
-import random
-import librosa
 import argparse
+import os
+import random
+
+import librosa
 import numpy as np
 import soundfile
+
 from commonFunc import dealWav
 
 parser = argparse.ArgumentParser()
@@ -18,8 +19,6 @@ parser.add_argument('--wavOutPath', required=True, type=str)
 args = parser.parse_args()
 
 _sr = 16000
-
-
 
 if __name__ == '__main__':
 
@@ -38,7 +37,7 @@ if __name__ == '__main__':
         assert sr == _sr
         assert len(data.shape) == 1
         noSilentData = dealWav(data)
-        totalData.append( [0, noSilentData] )
+        totalData.append([0, noSilentData])
 
     for ind in range(args.num1):
         wavPath = os.path.join(args.speakerPath1, wavNames1[ind])
@@ -46,7 +45,7 @@ if __name__ == '__main__':
         assert sr == _sr
         assert len(data.shape) == 1
         noSilentData = dealWav(data)
-        totalData.append( [1, noSilentData] )
+        totalData.append([1, noSilentData])
 
     random.shuffle(totalData)
 
@@ -65,9 +64,3 @@ if __name__ == '__main__':
     for inter in intervals:
         txtFile.write(str(inter[0]) + " " + str(inter[1]) + " " + str(inter[2]) + "\n")
     txtFile.close()
-
-
-
-
-
-

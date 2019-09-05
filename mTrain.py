@@ -13,21 +13,21 @@
 # limitations under the License.
 """A demo script showing how to use the uisrnn package on toy data."""
 
+import argparse
+
 import numpy as np
 
-import uisrnn
-import argparse
 import commonFunc
+import uisrnn
+
 parser = argparse.ArgumentParser()
-
-
 
 # set whether train new model: False for train new model and vice versa
 parser.add_argument('--shallLoad', default=False, type=commonFunc.str2bool)
 # set whether do test and measure accuracy after train
 parser.add_argument('--shallTest', default=False, type=commonFunc.str2bool)
 # set loaded utterances embeddings path
-parser.add_argument('--trainPath', required=True, type=str) # './ghostvlad/training_data.npz'
+parser.add_argument('--trainPath', required=True, type=str)  # './ghostvlad/training_data.npz'
 # set uis-rnn path
 parser.add_argument('--modelPath', required=True, type=str)  # SAVED_MODEL_NAME = 'pretrained/saved_model.uisrnn_benchmark'
 
@@ -35,7 +35,6 @@ parser.add_argument('--modelPath', required=True, type=str)  # SAVED_MODEL_NAME 
 parser.add_argument('--train_iteration', default=20000, type=int)
 
 args = parser.parse_args()
-
 
 
 def diarization_experiment(model_args, training_args, inference_args, args):
@@ -48,8 +47,6 @@ def diarization_experiment(model_args, training_args, inference_args, args):
       training_args: training configurations
       inference_args: inference configurations
     """
-
-
 
     predicted_labels = []
     test_record = []
