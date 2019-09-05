@@ -70,7 +70,6 @@ def arrangeResult(labels, time_spec_rate): # {'1': [{'start':10, 'stop':20}, {'s
     for i, label in enumerate(labels):
         if label == lastLabel:
             continue
-        # append2dict(speakerSlice, (lastLabel, (time_spec_rate*st, time_spec_rate*i)))
         append2dict(speakerSlice, [lastLabel, (time_spec_rate*st, time_spec_rate*i)])
         st = i
         lastLabel = label
@@ -100,6 +99,8 @@ def fmtTime(timeInMillisecond):
     millisecond = timeInMillisecond%1000
     minute = timeInMillisecond//1000//60
     second = (timeInMillisecond-minute*60*1000)//1000
+    if minute < 0 or millisecond < 0 or second < 0:
+        minute = millisecond = second = 0
     time = '{}:{:02d}.{}'.format(minute, second, millisecond)
     return time
 
@@ -111,7 +112,7 @@ def load_wav(vid_path, sr):
       wav_output.extend(wav[sliced[0]:sliced[1]])
     return wav, np.array(wav_output), intervals
 
-def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
+def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft):
     linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length) # linear spectrogram
     return linear.T
 
@@ -125,7 +126,7 @@ def lin_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
 #                               |-------------------|
 # |--------|
 # spec_hop_len
-def load_data(path, win_length=400, sr=16000, hop_length=160, n_fft=512, embedding_per_second=0.5, overlap_rate=0.5):
+def load_data(path, win_length, sr, hop_length, n_fft, embedding_per_second, overlap_rate):
     oriWavData, intervalWav, intervals = load_wav(path, sr=sr)
     linear_spect = lin_spectogram_from_wav(intervalWav, hop_length, win_length, n_fft)
     mag, _ = librosa.magphase(linear_spect)  # magnitude
@@ -298,7 +299,7 @@ def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shall
             # librosa.output.write_wav(outPath, outWavData, params['sr'])
 
     if args.shallComputeAcc:
-        accRate = min(1, max(accumulateFrameCnt[0], accumulateFrameCnt[1]) / _totalFrame)  # bugs to fix
+        accRate = min(1.0, max(accumulateFrameCnt[0], accumulateFrameCnt[1]) / _totalFrame)
 
     if args.shallComputeAcc:
         print('acc: %.2f%%' % (100*accRate, ))
@@ -310,19 +311,6 @@ def main(wav_path, embedding_per_second, num_speaker, shallOutput = False, shall
         p.plot.show()
 
 if __name__ == '__main__':
-
-    # wavPath = 'F:/tempMaterial/rec.wav'
-    # wavPath = r'wavs/eng_vad.wav'
-    # wavPath = r'wavs/柴宋博-俊业电话录音_vad.wav'
-    # wavPath = r'wavs/陈海峰-俊业电话录音_vad.wav'
-    # wavPath = r'wavs/mix1_vad.wav'
-    # wavPath = r'wavs/mixA3A4.wav'
-    # wavPath = r'wavs/mixA4A5.wav'
-    # wavPath = r'wavs/mixA5L5_vad.wav'
-    # wavPath = r'E:\source_code\python\
-    # keras\test\venv\DeepSpeechRecognition\data\data_thchs30\data\A2_0.wav'
-    # wavPath = r'wavs/LDC2005S15mix_vad.wav'
-    # embedding_per_second=1.2, overlap_rate=0.5
 
     main(args.wavPath, embedding_per_second=1.2, num_speaker=2, shallOutput=args.shallOutput, shallShow=args.shallShow)
 

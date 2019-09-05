@@ -1,4 +1,6 @@
 import argparse
+import librosa
+import numpy as np
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -9,3 +11,11 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def dealWav(wavData):
+    intervals = librosa.effects.split(wavData, top_db=20)
+    wav_output = []
+    for sliced in intervals:
+        wav_output.extend(wavData[sliced[0]:sliced[1]])
+    return np.array(wav_output)
